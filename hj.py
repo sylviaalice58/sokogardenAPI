@@ -4,6 +4,9 @@ from flask import *
 # import the pymysql module - It helps us to create connection between python flask and mysql database
 import pymysql
 
+# import password hashing functions
+from werkzeug.security import generate_password_hash, check_password_hash
+
 # Create a flask application and give it a name
 app = Flask(__name__) 
 
@@ -32,7 +35,8 @@ def signup():
         sql = "INSERT INTO users(username,email,phone,password) VALUES(%s, %s, %s, %s)"
 
         # create a tuple that will hold all the data gotten from the form
-        data = (username, email, phone, password)
+        # hash the password before storing it
+        data = (username, email, phone, generate_password_hash(password))
 
         # by use of the cursor, execute the sql as you replace the placeholder with the actual values
         cursor.execute(sql, data)
@@ -45,55 +49,24 @@ def signup():
 
 
 
-# Below is the login/sign in route
-@app.route("/api/signin",methods=["POST"])
+@app.route("/api/signin", methods=["POST"])
+
 def signin():
-    if request.method =="POST":
-        # extract the two details entered on the form
+    if request.method == "POST":
         email = request.form["email"]
-        password = request.form["password"]
+        password = request.form.get("password")
 
-        # print out the details enteres
-        # print(email, password)
-
-        # create/establish  a connection to the database
         connection = pymysql.connect(host="localhost", user="root", password="", database="sokogardenonline")
-
-        # create a cursor
         cursor = connection.cursor(pymysql.cursors.DictCursor)
 
-        # structure the sql query that will check whether the email and password entered is correct
-        sql ="SELECT * FROM users WHERE email = %s AND password = %s"
+        sql = "SELECT * FROM users WHERE email = %s"
+        cursor.execute(sql,  (email,))
+        user = cursor.fetchone()
 
-        # put the data received into a tuple
-        data = (email, password)
-
-        # by use of the cursor execute the sql
-        cursor.execute(sql, data)
-
-        # check whether there are rows returned and store the same on a variable
-        count= cursor.rowcount
-        # print(count) 
-
-        # if there are record return it means the password and email are correct otherwise it means they are wrong 
-        if count== 0:
-            return jsonify({"message":"Login failed"}) 
+        if user and check_password_hash(user['password'], password):
+            # Login successful – remove password before sending
+            del user['password']
+            return jsonify({"message": "User logged in successfully", "user": user})
         else:
-            # There must be a user so we create a variable that will hold the details of the user fetched from the database
-            user=cursor.fetchone()
-            # Return the details to the frontend as well as a message
-            return jsonify({"message":"User logged in successfully", "user":user})
-        
-
-
-
-
-        
-
-
-
-
-
-
-# run the application 
+            return jsonify({"message": "Login failed"})
 app.run(debug=True)
